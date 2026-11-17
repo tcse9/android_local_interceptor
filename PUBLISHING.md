@@ -1,7 +1,7 @@
 # Publishing to Maven Central
 
 The repository is https://github.com/tcse9/android_local_interceptor.
-The Maven coordinates are `io.github.tcse9:inspector:0.1.0`.
+The Maven coordinates are `io.github.tcse9:inspector:0.1.1`.
 The source is distributed under the MIT License.
 
 ## 1. Verify your namespace
@@ -59,7 +59,7 @@ Reference: https://central.sonatype.org/publish/requirements/gpg/
 Replace the fingerprint argument with your actual full fingerprint.
 
 ```sh
-./scripts/prepare-central.sh 0.1.0 YOUR_FULL_FINGERPRINT
+./scripts/prepare-central.sh 0.1.1 YOUR_FULL_FINGERPRINT
 ```
 
 Enter the GPG passphrase when prompted.
@@ -67,7 +67,7 @@ The script builds the release AAR, sources, Javadoc and Maven metadata, signs th
 verifies the signatures and checksums, and creates this ZIP.
 
 ```text
-inspector/build/central-bundle-0.1.0.zip
+inspector/build/central-bundle-0.1.1.zip
 ```
 
 The script prepares a local archive. The portal upload is the next step.
@@ -75,8 +75,8 @@ The script prepares a local archive. The portal upload is the next step.
 ## 6. Upload and publish
 
 Open https://central.sonatype.com and choose Publish Component.
-Use `io.github.tcse9:inspector:0.1.0` as the deployment name.
-Upload `inspector/build/central-bundle-0.1.0.zip`.
+Use `io.github.tcse9:inspector:0.1.1` as the deployment name.
+Upload `inspector/build/central-bundle-0.1.1.zip`.
 Wait for validation, review its results, and click Publish.
 Wait until the deployment reaches Published.
 
@@ -89,7 +89,7 @@ dependency to its Android app module.
 
 ```kotlin
 dependencies {
-    debugImplementation("io.github.tcse9:inspector:0.1.0")
+    debugImplementation("io.github.tcse9:inspector:0.1.1")
 }
 ```
 
@@ -99,10 +99,10 @@ The desktop dashboard is included in this GitHub repository.
 ## 8. Publish subsequent releases
 
 Published Maven Central versions are immutable. Choose a new version for each release.
-For example, prepare version 0.1.1 with this command and upload the resulting ZIP.
+For example, prepare version 0.1.2 with this command and upload the resulting ZIP.
 
 ```sh
-./scripts/prepare-central.sh 0.1.1 YOUR_FULL_FINGERPRINT
+./scripts/prepare-central.sh 0.1.2 YOUR_FULL_FINGERPRINT
 ```
 
 Update the default version in `inspector/build.gradle` and README dependency examples

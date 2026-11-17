@@ -13,7 +13,7 @@
     <h1>Network Inspector</h1>
     <span class="connection" id="connection" role="status">Connecting</span>
   </header>
-  <main>
+  <main id="workspace">
     <section class="traffic" aria-labelledby="traffic-title">
       <div class="section-heading">
         <h2 id="traffic-title">Traffic <span id="count">0</span></h2>
@@ -26,6 +26,7 @@
       <div id="calls"></div>
       <p class="empty" id="empty">Waiting for network calls.</p>
     </section>
+    <div class="splitter" id="traffic-splitter" role="separator" tabindex="0" aria-label="Resize traffic pane" aria-orientation="vertical" aria-controls="traffic-title"></div>
     <section class="detail" aria-label="Call details">
       <p class="empty" id="detail-empty">Select a request to view its headers, bodies, and cURL command.</p>
       <div id="detail-content" hidden>
@@ -38,11 +39,12 @@
           <button class="primary" id="copy" type="button">Copy cURL</button>
         </div>
         <p id="copy-note" role="status"></p>
-        <div class="detail-panels">
+        <div class="detail-panels" id="body-panels">
           <section aria-labelledby="request-title">
             <h3 id="request-title">Request</h3>
             <div id="request"></div>
           </section>
+          <div class="splitter" id="body-splitter" role="separator" tabindex="0" aria-label="Resize request pane" aria-orientation="vertical" aria-controls="request-title"></div>
           <section aria-labelledby="response-title">
             <h3 id="response-title">Response</h3>
             <div id="response"></div>

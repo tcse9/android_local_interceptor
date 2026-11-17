@@ -35,7 +35,7 @@ afterEvaluate {
                 from components.release
                 groupId = 'io.github.tcse9'
                 artifactId = 'inspector'
-                version = providers.gradleProperty('releaseVersion').getOrElse('0.1.0')
+                version = providers.gradleProperty('releaseVersion').getOrElse('0.1.1')
                 pom {
                     name = 'Android Local Network Inspector'
                     description = 'Debug-only OkHttp request and response inspection with a local browser dashboard.'

@@ -30,7 +30,17 @@ public final class NetworkInspector implements AutoCloseable {
         this(150, 64 * 1024, java.util.Collections.emptySet());
     }
 
+    /** Captures Authorization values when true, including them in dashboard and cURL exports. */
+    public NetworkInspector(boolean captureAuthorization) {
+        this(150, 64 * 1024, java.util.Collections.emptySet(), captureAuthorization);
+    }
+
     public NetworkInspector(int maxCalls, int maxBodyBytes, Collection<String> extraRedactedHeaders) {
+        this(maxCalls, maxBodyBytes, extraRedactedHeaders, false);
+    }
+
+    public NetworkInspector(int maxCalls, int maxBodyBytes, Collection<String> extraRedactedHeaders,
+            boolean captureAuthorization) {
         if (maxCalls < 1 || maxCalls > 500 || maxBodyBytes < 1 || maxBodyBytes > 256 * 1024
                 || (long) maxCalls * maxBodyBytes > 32L * 1024 * 1024) {
             throw new IllegalArgumentException("Invalid capture limits");
@@ -39,6 +49,9 @@ public final class NetworkInspector implements AutoCloseable {
         this.maxBodyBytes = maxBodyBytes;
         redactedHeaders = new HashSet<>(java.util.Arrays.asList(
                 "authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key"));
+        if (captureAuthorization) {
+            redactedHeaders.remove("authorization");
+        }
         for (String header : extraRedactedHeaders) {
             redactedHeaders.add(header.toLowerCase(Locale.ROOT));
         }

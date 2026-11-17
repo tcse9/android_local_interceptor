@@ -254,3 +254,57 @@ byId("copy").addEventListener("click", async () => {
   }
 });
 refresh();
+
+
+// Keep both panes usable while resizing with a pointer or keyboard.
+function configureSplitter(handleId, containerId, minimum, initial) {
+  const handle = byId(handleId);
+  const container = byId(containerId);
+  let percentage = initial;
+
+  function resize(value) {
+    const width = container.getBoundingClientRect().width - handle.offsetWidth;
+    if (width <= 0) return;
+    const lower = Math.min(50, minimum / width * 100);
+    percentage = Math.max(lower, Math.min(100 - lower, value));
+    container.style.setProperty("--pane-width", `${percentage}%`);
+    handle.setAttribute("aria-valuemin", String(Math.round(lower)));
+    handle.setAttribute("aria-valuemax", String(Math.round(100 - lower)));
+    handle.setAttribute("aria-valuenow", String(Math.round(percentage)));
+  }
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || !event.isPrimary) return;
+    event.preventDefault();
+    handle.setPointerCapture(event.pointerId);
+    document.body.classList.add("resizing");
+  });
+  handle.addEventListener("pointermove", (event) => {
+    if (!handle.hasPointerCapture(event.pointerId)) return;
+    const bounds = container.getBoundingClientRect();
+    resize((event.clientX - bounds.left - handle.offsetWidth / 2)
+      / (bounds.width - handle.offsetWidth) * 100);
+  });
+  function finish() {
+    document.body.classList.remove("resizing");
+  }
+  handle.addEventListener("lostpointercapture", finish);
+  handle.addEventListener("pointerup", (event) => {
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    finish();
+  });
+  handle.addEventListener("pointercancel", finish);
+  handle.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const value = event.key === "Home" ? 0 : event.key === "End" ? 100
+      : percentage + (event.key === "ArrowLeft" ? -2 : 2);
+    resize(value);
+  });
+  handle.addEventListener("dblclick", () => resize(initial));
+  new ResizeObserver(() => resize(percentage)).observe(container);
+  resize(initial);
+}
+
+configureSplitter("traffic-splitter", "workspace", 270, 36);
+configureSplitter("body-splitter", "body-panels", 160, 50);
