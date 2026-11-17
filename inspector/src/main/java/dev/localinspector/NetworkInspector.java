@@ -30,7 +30,7 @@ public final class NetworkInspector implements AutoCloseable {
         this(150, 64 * 1024, java.util.Collections.emptySet());
     }
 
-    /** Captures Authorization values when true, including them in dashboard and cURL exports. */
+    /** Captures Authorization and Proxy-Authorization values when true, including them in dashboard and cURL exports. */
     public NetworkInspector(boolean captureAuthorization) {
         this(150, 64 * 1024, java.util.Collections.emptySet(), captureAuthorization);
     }
@@ -51,6 +51,7 @@ public final class NetworkInspector implements AutoCloseable {
                 "authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key"));
         if (captureAuthorization) {
             redactedHeaders.remove("authorization");
+            redactedHeaders.remove("proxy-authorization");
         }
         for (String header : extraRedactedHeaders) {
             redactedHeaders.add(header.toLowerCase(Locale.ROOT));

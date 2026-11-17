@@ -65,17 +65,19 @@ Follow [PUBLISHING.md](PUBLISHING.md) to prepare a signed release bundle and pub
 
 ## Authenticated cURL replay
 
-The default configuration redacts Authorization before storing a call.
-To include Authorization in the dashboard and copied cURL, create the inspector with
+The default configuration redacts Authorization and Proxy-Authorization before storing a call.
+To include Authorization and Proxy-Authorization in the dashboard and copied cURL, create the inspector with
 explicit capture enabled in your debug networking configuration.
 
 ```kotlin
 private val inspector = NetworkInspector(true)
 ```
 
-Register the inspector after the application interceptor that adds Authorization.
+Register the inspector after the application interceptor that adds these headers.
 Restart the app and trigger a fresh request after changing this setting.
 Captured tokens are visible in the dashboard and copied commands.
 This constructor is available starting with 0.1.1. With version 0.1.0, add Authorization manually in Postman or your cURL command.
 
 Drag the dividers between traffic and details, or between request and response, to adjust pane widths. Focus a divider and use arrow keys for keyboard resizing. Double-click a divider to reset its width. Narrow screens stack the panes.
+
+Proxy-Authorization capture with this option requires a source build containing this update or the next Maven release after 0.1.1. Explicit extra redacted header names still take precedence over the capture option.
