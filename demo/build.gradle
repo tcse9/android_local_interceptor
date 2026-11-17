@@ -1,0 +1,22 @@
+plugins {
+    id 'com.android.application'
+}
+android {
+    namespace 'dev.localinspector.demo'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'dev.localinspector.demo'
+        minSdk 21
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+dependencies {
+    debugImplementation project(':inspector')
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+}

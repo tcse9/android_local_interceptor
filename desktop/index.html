@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Network Inspector</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+    <h1>Network Inspector</h1>
+    <span class="connection" id="connection" role="status">Connecting</span>
+  </header>
+  <main>
+    <section class="traffic" aria-labelledby="traffic-title">
+      <div class="section-heading">
+        <h2 id="traffic-title">Traffic <span id="count">0</span></h2>
+        <button id="pause" type="button" aria-pressed="false">Pause</button>
+        <button id="clear" type="button">Clear</button>
+      </div>
+      <input type="search" id="filter" aria-label="Filter network calls" placeholder="Filter by method, URL or status">
+      <p id="notice" role="status" hidden></p>
+      <div class="column-head" aria-hidden="true"><span>Request</span><span>Status</span><span>Time</span></div>
+      <div id="calls"></div>
+      <p class="empty" id="empty">Waiting for network calls.</p>
+    </section>
+    <section class="detail" aria-label="Call details">
+      <p class="empty" id="detail-empty">Select a request to view its headers, bodies, and cURL command.</p>
+      <div id="detail-content" hidden>
+        <div class="detail-heading">
+          <div>
+            <div id="detail-meta"></div>
+            <h2 id="detail-title"></h2>
+            <p id="detail-info"></p>
+          </div>
+          <button class="primary" id="copy" type="button">Copy cURL</button>
+        </div>
+        <p id="copy-note" role="status"></p>
+        <div class="detail-panels">
+          <section aria-labelledby="request-title">
+            <h3 id="request-title">Request</h3>
+            <div id="request"></div>
+          </section>
+          <section aria-labelledby="response-title">
+            <h3 id="response-title">Response</h3>
+            <div id="response"></div>
+          </section>
+        </div>
+        <details class="curl-panel" id="curl-panel">
+          <summary>cURL command</summary>
+          <pre id="curl-text"></pre>
+        </details>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

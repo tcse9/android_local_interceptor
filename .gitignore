@@ -1,0 +1,11 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+__pycache__/
+.DS_Store
+*.asc
+*.key
+*.pem
+.env

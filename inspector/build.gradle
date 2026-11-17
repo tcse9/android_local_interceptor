@@ -1,0 +1,65 @@
+plugins {
+    id 'com.android.library'
+    id 'maven-publish'
+}
+android {
+    namespace 'dev.localinspector'
+    compileSdk 35
+    defaultConfig {
+        minSdk 21
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
+}
+dependencies {
+    api 'com.squareup.okhttp3:okhttp:4.12.0'
+}
+afterEvaluate {
+    publishing {
+        repositories {
+            maven {
+                name = 'centralBundle'
+                url = layout.buildDirectory.dir('central-repo').get().asFile.toURI()
+            }
+        }
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId = 'io.github.tcse9'
+                artifactId = 'inspector'
+                version = providers.gradleProperty('releaseVersion').getOrElse('0.1.0')
+                pom {
+                    name = 'Android Local Network Inspector'
+                    description = 'Debug-only OkHttp request and response inspection with a local browser dashboard.'
+                    url = 'https://github.com/tcse9/android_local_interceptor'
+                    licenses {
+                        license {
+                            name = 'MIT License'
+                            url = 'https://opensource.org/license/mit/'
+                        }
+                    }
+                    developers {
+                        developer {
+                            id = 'tcse9'
+                            name = 'tcse9'
+                            url = 'https://github.com/tcse9'
+                        }
+                    }
+                    scm {
+                        url = 'https://github.com/tcse9/android_local_interceptor'
+                        connection = 'scm:git:https://github.com/tcse9/android_local_interceptor.git'
+                        developerConnection = 'scm:git:ssh://git@github.com/tcse9/android_local_interceptor.git'
+                    }
+                }
+            }
+        }
+    }
+}
