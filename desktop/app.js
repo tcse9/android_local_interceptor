@@ -136,6 +136,14 @@ function curlCommand(call) {
   if (!call.requestHeaders.some(([name]) => name.toLowerCase() === "content-type")) {
     args.push("--header", shellQuote("Content-Type:"));
   }
+  if (typeof body.text === "string" && !body.text.includes("\0")) {
+    const bytes = new TextEncoder().encode(body.text);
+    const encoded = btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+    if (encoded === body.base64) {
+      args.push("--data-raw", shellQuote(body.text));
+      return args.join(" ");
+    }
+  }
   args.push("--data-binary", body.base64 ? "@-" : "''");
   const request = args.join(" ");
   return body.base64
