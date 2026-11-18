@@ -9,7 +9,8 @@ import okhttp3.OkHttpClient;
 final class DemoClient {
     private static final NetworkInspector INSPECTOR = new NetworkInspector();
     private static final OkHttpClient CLIENT = new OkHttpClient.Builder()
-            .addInterceptor(INSPECTOR.interceptor()).build();
+            .addInterceptor(INSPECTOR.interceptor())
+            .eventListenerFactory(INSPECTOR.eventListenerFactory()).build();
     private static boolean started;
 
     static synchronized OkHttpClient get(Activity activity) {

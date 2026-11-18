@@ -5,12 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Network Inspector</title>
   <link rel="stylesheet" href="/style.css">
+  <script src="/formats.js" defer></script>
   <script src="/app.js" defer></script>
+  <script src="/workbench.js" defer></script>
 </head>
 <body>
   <header class="top">
     <div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></div>
     <h1>Network Inspector</h1>
+    <label class="compact">Device <select id="device"><option value="">Select device</option></select></label>
+    <button id="refresh-devices" type="button">Refresh devices</button>
+    <label class="compact">App <input id="application-id" aria-label="Application ID" placeholder="com.example.app"></label>
     <span class="connection" id="connection" role="status">Connecting</span>
   </header>
   <main id="workspace">
@@ -20,7 +25,34 @@
         <button id="pause" type="button" aria-pressed="false">Pause</button>
         <button id="clear" type="button">Clear</button>
       </div>
+      <div class="toolbar">
+        <select id="source" aria-label="Capture source"><option value="live">Live device</option><option value="saved">Imported / replayed</option></select>
+        <button type="button" id="import-file">Import</button>
+        <input type="file" id="file" accept=".json,application/json" hidden>
+        <button type="button" id="export-file">Export</button>
+      </div>
       <input type="search" id="filter" aria-label="Filter network calls" placeholder="Filter by method, URL or status">
+      <div class="filters">
+        <select id="method-filter" aria-label="HTTP method">
+          <option value="">All methods</option><option>GET</option><option>POST</option><option>PUT</option>
+          <option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option><option>WS</option>
+        </select>
+        <select id="status-filter" aria-label="Status filter">
+          <option value="">All statuses</option><option value="2">2xx</option><option value="3">3xx</option>
+          <option value="4">4xx</option><option value="5">5xx</option><option value="failed">Failed</option><option value="pending">Pending</option>
+        </select>
+        <input type="number" id="duration-filter" min="0" placeholder="Min ms" aria-label="Minimum duration in milliseconds">
+      </div>
+      <input type="search" id="payload-filter" aria-label="Search headers and payloads" placeholder="Search headers and payloads">
+      <p id="search-state" role="status"></p>
+      <details class="rules-controls">
+        <summary>Device mocks and network simulation</summary>
+        <p>Rules affect subsequent matching calls in the selected app.</p>
+        <label>Rules JSON<textarea id="rules-json" rows="6" spellcheck="false">[]</textarea></label>
+        <button type="button" id="load-rules">Load</button>
+        <button type="button" id="save-rules">Apply</button>
+        <p>Match method and exact URL. Set delayMs, failure, or status / headers / body for a mock.</p>
+      </details>
       <p id="notice" role="status" hidden></p>
       <div class="column-head" aria-hidden="true"><span>Request</span><span>Status</span><span>Time</span></div>
       <div id="calls"></div>
@@ -36,9 +68,15 @@
             <h2 id="detail-title"></h2>
             <p id="detail-info"></p>
           </div>
-          <button class="primary" id="copy" type="button">Copy cURL</button>
+          <div class="toolbar">
+            <button class="primary" id="copy" type="button">Copy cURL</button>
+            <button id="edit-replay" type="button">Edit &amp; replay</button>
+            <button id="pin-compare" type="button">Compare with…</button>
+          </div>
         </div>
         <p id="copy-note" role="status"></p>
+        <details id="diagnostics"><summary>Timing and WebSocket messages</summary><div id="diagnostic-content"></div></details>
+        <details id="comparison" hidden><summary>Comparison</summary><pre id="comparison-text"></pre></details>
         <div class="detail-panels" id="body-panels">
           <section aria-labelledby="request-title">
             <h3 id="request-title">Request</h3>
@@ -57,5 +95,28 @@
       </div>
     </section>
   </main>
+<dialog id="replay-dialog">
+  <form id="replay-form">
+    <h2>Edit &amp; replay</h2>
+    <p>Runs from this computer using its network and TLS trust. Redirect responses are shown directly.</p>
+    <label>Method<input id="replay-method" required pattern="[A-Z]+"></label>
+    <label>URL<input id="replay-url" required type="url"></label>
+    <label>Headers, one per line<textarea id="replay-headers" rows="6" spellcheck="false"></textarea></label>
+    <label>Body encoding<select id="replay-encoding"><option value="text">UTF-8 text</option><option value="base64">Base64</option></select></label>
+    <label>Request body<textarea id="replay-body" rows="8" spellcheck="false"></textarea></label>
+    <p id="replay-note" role="status"></p>
+    <div class="toolbar"><button type="submit" id="send-replay" class="primary">Send request</button><button type="button" id="close-replay">Close</button></div>
+  </form>
+</dialog>
+<dialog id="export-dialog">
+  <h2>Export captures</h2>
+  <label>Format<select id="export-format"><option value="session">Inspector session</option><option value="postman">Postman collection v2.1</option></select></label>
+  <label>Calls<select id="export-scope"><option value="filtered">Filtered calls</option><option value="selected">Selected call</option></select></label>
+  <label class="check"><input type="checkbox" id="export-secrets">Include captured sensitive headers and WebSocket messages</label>
+  <label>JSON body and query fields to redact, comma-separated<input id="redact-fields" placeholder="password, token, userId"></label>
+  <p id="export-note" role="status">Review the exact exported content before downloading. Bodies and URLs may contain sensitive values.</p>
+  <pre id="export-preview" tabindex="0"></pre>
+  <div class="toolbar"><button id="preview-export" type="button">Preview</button><button id="download-export" type="button" disabled>Download</button><button id="close-export" type="button">Close</button></div>
+</dialog>
 </body>
 </html>

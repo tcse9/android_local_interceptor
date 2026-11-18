@@ -23,7 +23,7 @@ import org.json.JSONObject;
 
 final class Exchange {
     final long id;
-    private final String method;
+    private String method;
     private final String url;
     private final long startedAt = System.currentTimeMillis();
     private final long startedNanos = System.nanoTime();
@@ -39,9 +39,62 @@ final class Exchange {
     private Integer status;
     private Long headersMs;
     private Long elapsedMs;
+    private CallTiming timing;
+    private boolean matchedRule;
+    private final int messageLimit;
+    private final java.util.ArrayDeque<JSONObject> messages = new java.util.ArrayDeque<>();
+    private long messageBytes;
+
+    synchronized void setTiming(CallTiming timing) {
+        this.timing = timing;
+    }
+
+    synchronized void setRule(boolean matched) {
+        matchedRule = matched;
+    }
+
+    synchronized void socketOpened(Response response) {
+        method = "WS";
+        status = response.code();
+        responseHeaders = headers(response.headers());
+        protocol = response.protocol().toString();
+        headersMs = elapsed();
+        phase = "WebSocket open";
+    }
+
+    synchronized void socketStarting() {
+        method = "WS";
+        phase = "WebSocket connecting";
+    }
+
+    synchronized void socketClosed(Throwable failure) {
+        finish("none", failure);
+    }
+
+    synchronized void message(String direction, okio.ByteString value, boolean binary) {
+        int size = value.size();
+        int captured = Math.min(size, messageLimit);
+        okio.ByteString preview = value.substring(0, captured);
+        try {
+            JSONObject message = new JSONObject().put("direction", direction)
+                    .put("kind", binary ? "binary" : "text").put("bytes", size)
+                    .put("truncated", captured < size).put("elapsedMs", elapsed())
+                    .put("base64", preview.base64());
+            if (!binary) message.put("text", preview.utf8());
+            while (!messages.isEmpty() && (messages.size() >= 200 || messageBytes + captured > messageLimit * 2L)) {
+                messageBytes -= messages.removeFirst().optInt("capturedBytes");
+            }
+            message.put("capturedBytes", captured);
+            messages.addLast(message);
+            messageBytes += captured;
+        } catch (JSONException error) {
+            throw new IllegalStateException(error);
+        }
+    }
 
     Exchange(long id, Request request, int limit, Set<String> secrets) {
         this.id = id;
+        this.messageLimit = limit;
         this.method = request.method();
         this.url = request.url().toString();
         this.secrets = secrets;
@@ -160,7 +213,10 @@ final class Exchange {
         return summary().put("protocol", protocol).put("responseUrl", responseUrl)
                 .put("error", error).put("requestHeaders", requestHeaders)
                 .put("responseHeaders", responseHeaders)
-                .put("requestBody", sent.json()).put("responseBody", received.json());
+                .put("requestBody", sent.json()).put("responseBody", received.json())
+                .put("timings", timing == null ? new JSONArray() : timing.json())
+                .put("messages", new JSONArray(messages))
+                .put("source", matchedRule ? "Device · traffic rule applied" : "Device");
     }
 
     private JSONArray headers(Headers headers) {

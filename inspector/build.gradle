@@ -7,6 +7,7 @@ android {
     compileSdk 35
     defaultConfig {
         minSdk 21
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -21,6 +22,9 @@ android {
 }
 dependencies {
     api 'com.squareup.okhttp3:okhttp:4.12.0'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
 }
 afterEvaluate {
     publishing {
@@ -35,7 +39,7 @@ afterEvaluate {
                 from components.release
                 groupId = 'io.github.tcse9'
                 artifactId = 'inspector'
-                version = providers.gradleProperty('releaseVersion').getOrElse('0.1.1')
+                version = providers.gradleProperty('releaseVersion').getOrElse('0.2.0')
                 pom {
                     name = 'Android Local Network Inspector'
                     description = 'Debug-only OkHttp request and response inspection with a local browser dashboard.'

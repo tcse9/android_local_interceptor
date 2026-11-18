@@ -25,6 +25,40 @@ public final class NetworkInspector implements AutoCloseable {
     private final ArrayDeque<Exchange> calls = new ArrayDeque<>();
     private final AtomicLong nextId = new AtomicLong();
     private volatile DeviceBridge bridge;
+    private final TrafficRules trafficRules = new TrafficRules();
+    private final java.util.Map<okhttp3.Call, CallTiming> timings = new java.util.WeakHashMap<>();
+
+    /** Attach to the client to capture DNS, connection, TLS, and transfer event timestamps. */
+    public okhttp3.EventListener.Factory eventListenerFactory() {
+        return eventListenerFactory(call -> okhttp3.EventListener.NONE);
+    }
+
+    /** Wrap an existing factory to preserve its event callbacks. */
+    public okhttp3.EventListener.Factory eventListenerFactory(okhttp3.EventListener.Factory delegate) {
+        return call -> {
+            CallTiming timing = new CallTiming();
+            synchronized (timings) {
+                timings.put(call, timing);
+            }
+            return new TimingListener(delegate.create(call), timing);
+        };
+    }
+
+    /** Use this entry point to inspect sent and received WebSocket messages. */
+    public okhttp3.WebSocket newWebSocket(okhttp3.OkHttpClient client, Request request,
+            okhttp3.WebSocketListener listener) {
+        Exchange exchange = begin(request);
+        if (exchange == null) return client.newWebSocket(request, listener);
+        return InspectedWebSocket.open(client, request, listener, exchange);
+    }
+
+    JSONArray rules() throws JSONException {
+        return trafficRules.json();
+    }
+
+    void setRules(JSONArray rules) throws JSONException {
+        trafficRules.replace(rules);
+    }
 
     public NetworkInspector() {
         this(150, 64 * 1024, java.util.Collections.emptySet());
@@ -74,13 +108,19 @@ public final class NetworkInspector implements AutoCloseable {
             Exchange exchange = begin(request);
             if (exchange == null) return chain.proceed(request);
 
+            synchronized (timings) {
+                exchange.setTiming(timings.get(chain.call()));
+            }
+            JSONObject rule = trafficRules.match(request);
+            exchange.setRule(rule != null);
+
             RequestBody body = request.body();
             if (body != null && !body.isDuplex()) {
                 request = request.newBuilder()
                         .method(request.method(), exchange.captureRequest(body)).build();
             }
             try {
-                Response response = chain.proceed(request);
+                Response response = trafficRules.execute(chain, request, rule);
                 return exchange.captureResponse(response);
             } catch (IOException | RuntimeException error) {
                 exchange.fail(error);

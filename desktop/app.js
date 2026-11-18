@@ -13,6 +13,35 @@ let selected = null;
 let details = null;
 let paused = false;
 let generation = 0;
+let serial = "";
+let applicationId = "";
+let source = "live";
+let savedCalls = [];
+let comparisonCall = null;
+const captures = new Map();
+
+function devicePath(path) {
+  return path + "?" + new URLSearchParams({serial, app: applicationId});
+}
+
+function visibleCalls() {
+  const filter = byId("filter").value.trim().toLowerCase();
+  const payload = byId("payload-filter").value.trim().toLowerCase();
+  const method = byId("method-filter").value;
+  const status = byId("status-filter").value;
+  const duration = Number(byId("duration-filter").value) || 0;
+  return calls.filter(call => {
+    const match = [call.method, call.url, statusLabel(call)].some(value => String(value).toLowerCase().includes(filter));
+    const statusMatch = !status || (status === "failed" ? call.phase === "Failed"
+      : status === "pending" ? !call.status && !["Failed", "Imported"].includes(call.phase) : Math.floor(call.status / 100) === Number(status));
+    const capture = captures.get(call.id)?.call;
+    const payloadText = capture ? JSON.stringify([capture.requestHeaders, capture.responseHeaders,
+      capture.requestBody.text, capture.responseBody.text, capture.messages]).toLowerCase() : "";
+    return match && (!method || call.method === method) && statusMatch
+      && (!duration || (call.elapsedMs ?? call.headersMs ?? 0) >= duration)
+      && (!payload || payloadText.includes(payload));
+  });
+}
 
 async function get(path, options) {
   const response = await fetch(path, options);
@@ -29,7 +58,7 @@ function setConnection(message, mode, notice = "") {
 }
 
 function statusLabel(call) {
-  return call.status ?? (call.phase === "Failed" ? "Failed" : "Pending");
+  return call.status ?? (call.phase === "Failed" ? "Failed" : call.phase === "Imported" ? "Imported" : "Pending");
 }
 
 function statusKind(call) {
@@ -40,10 +69,7 @@ function statusKind(call) {
 function renderCalls() {
   const list = byId("calls");
   const focused = list.contains(document.activeElement) ? document.activeElement.dataset.id : null;
-  const filter = byId("filter").value.trim().toLowerCase();
-  const filtered = calls.filter((call) =>
-    [call.method, call.url, statusLabel(call)].some((value) => String(value).toLowerCase().includes(filter))
-  );
+  const filtered = visibleCalls();
   list.replaceChildren(...filtered.map((call) => {
     const row = document.createElement("button");
     row.type = "button";
@@ -61,9 +87,9 @@ function renderCalls() {
     return row;
   }));
   if (focused) list.querySelector(`[data-id="${focused}"]`)?.focus({preventScroll: true});
-  byId("count").textContent = filter ? `${filtered.length} / ${calls.length}` : calls.length;
+  byId("count").textContent = filtered.length !== calls.length ? `${filtered.length} / ${calls.length}` : calls.length;
   byId("empty").hidden = filtered.length > 0;
-  byId("empty").textContent = filter ? "No calls match this filter." : "Waiting for network calls.";
+  byId("empty").textContent = calls.length ? "No calls match this filter." : "Waiting for network calls.";
 }
 
 function bodyLabel(body) {
@@ -107,8 +133,38 @@ function renderPanel(target, headers, body) {
   if (body.bytes || ["partial", "reading", "complete"].includes(body.state)) label += ` · ${bytes}`;
   if (body.base64 && body.text === undefined) label += " · Base64";
   bodyPanel.append(text("summary", label));
-  if (body.capturedBytes) bodyPanel.append(text("pre", formatBody(body)));
+  if (body.capturedBytes) {
+    const copy = text("button", body.text === undefined ? "Copy Base64" : "Copy body");
+    copy.type = "button";
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(body.text ?? body.base64);
+        copy.textContent = "Copied";
+      } catch {
+        copy.textContent = "Select body text to copy";
+      }
+    });
+    if (body.truncated || body.state === "partial") copy.title = "Copies the captured portion";
+    const pre = highlightedBody(formatBody(body));
+    bodyPanel.append(copy, pre);
+  }
   target.replaceChildren(headerPanel, bodyPanel);
+}
+
+function highlightedBody(value) {
+  const pre = document.createElement("pre");
+  const pattern = /"(?:\\.|[^"\\])*"\s*:|"(?:\\.|[^"\\])*"|-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b|\b(?:true|false|null)\b/g;
+  let offset = 0;
+  for (const match of String(value).matchAll(pattern)) {
+    pre.append(document.createTextNode(value.slice(offset, match.index)));
+    const token = match[0];
+    const kind = token.endsWith(":") ? "key" : token.startsWith('"') ? "string"
+      : /^(true|false|null)$/.test(token) ? "literal" : "number";
+    pre.append(text("span", token, "syntax-" + kind));
+    offset = match.index + token.length;
+  }
+  pre.append(document.createTextNode(String(value).slice(offset)));
+  return pre;
 }
 
 function shellQuote(value) {
@@ -121,6 +177,7 @@ const transportHeaders = new Set([
 
 function curlCommand(call) {
   const body = call.requestBody;
+  if (call.method === "WS") return "";
   if (body.state !== "none" && (body.state !== "complete" || body.truncated)) return "";
   const args = ["curl", "--globoff", "--request", shellQuote(call.method), "--url", shellQuote(call.url)];
   const connectionHeaders = call.requestHeaders
@@ -167,19 +224,25 @@ function renderDetails(call) {
   if (call.responseUrl && call.responseUrl !== call.url) info.push(`Final URL ${call.responseUrl}`);
   if (call.error) info.push(call.error);
   byId("detail-info").textContent = info.filter(Boolean).join(" · ");
+  renderDiagnostics(call);
+  renderComparison(call);
   renderPanel(byId("request"), call.requestHeaders, call.requestBody);
   renderPanel(byId("response"), call.responseHeaders, call.responseBody);
   const command = curlCommand(call);
   byId("copy").disabled = !command;
+  byId("edit-replay").disabled = call.method === "WS";
   byId("curl-panel").hidden = !command;
   byId("curl-text").textContent = command;
-  byId("copy-note").textContent = !command ? "cURL export requires the complete request body."
+  byId("copy-note").textContent = call.method === "WS" ? "WebSocket messages are available under Timing and WebSocket messages." : !command ? "cURL export requires the complete request body."
     : call.requestHeaders.some(([, , redacted]) => redacted) ? "Redacted headers are omitted from the cURL command." : "";
 }
 
 async function loadDetails(id, version) {
   try {
-    const call = await get(`/api/calls/${id}`);
+    const call = source === "saved" ? savedCalls.find(item => item.id === id)
+      : await get(devicePath(`/api/calls/${id}`));
+    if (!call) throw new Error("Call unavailable");
+    if (version === generation) captures.set(id, {call, fingerprint: JSON.stringify(calls.find(item => item.id === id))});
     if (version === generation && selected === id && JSON.stringify(details) !== JSON.stringify(call)) {
       details = call;
       renderDetails(call);
@@ -204,17 +267,20 @@ function select(id) {
 
 async function refresh(wait = 1000) {
   try {
-    if (!paused) {
+    if (!paused && source === "live" && serial && applicationId) {
       const version = generation;
-      const next = await get("/api/calls");
+      const next = await get(devicePath("/api/calls"));
       if (version === generation && !paused) {
         if (JSON.stringify(calls) !== JSON.stringify(next)) {
           calls = next;
+          const retained = new Set(calls.map(call => call.id));
+          for (const id of captures.keys()) if (!retained.has(id)) captures.delete(id);
           if (selected != null && !calls.some((call) => call.id === selected)) select(null);
           else renderCalls();
         }
         setConnection("Connected", "connected");
         if (selected != null) await loadDetails(selected, generation);
+        if (byId("payload-filter").value.trim()) await searchPayloads();
       }
     }
   } catch (error) {
@@ -234,8 +300,10 @@ byId("pause").addEventListener("click", () => {
 });
 byId("clear").addEventListener("click", async () => {
   try {
-    await get("/api/clear", {method: "POST", headers: {"X-Network-Inspector": "1"}});
+    if (source === "live") await get(devicePath("/api/clear"), {method: "POST", headers: {"X-Network-Inspector": "1"}});
+    else savedCalls = [];
     generation++;
+    captures.clear();
     calls = [];
     select(null);
   } catch (error) {

@@ -3,6 +3,7 @@ package dev.localinspector;
 import android.net.Credentials;
 import android.net.LocalServerSocket;
 import android.net.LocalSocket;
+import android.net.LocalSocketAddress;
 import android.util.Log;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -12,11 +13,14 @@ import org.json.JSONException;
 
 final class DeviceBridge implements AutoCloseable {
     private final LocalServerSocket listener;
+    private final String name;
+    private final Thread worker;
     private volatile boolean closed;
 
     DeviceBridge(String name, NetworkInspector inspector) throws IOException {
+        this.name = name;
         listener = new LocalServerSocket(name);
-        Thread worker = new Thread(() -> serve(inspector), "network-inspector");
+        worker = new Thread(() -> serve(inspector), "network-inspector");
         worker.setDaemon(true);
         worker.start();
     }
@@ -31,6 +35,7 @@ final class DeviceBridge implements AutoCloseable {
                 return;
             }
             try (LocalSocket client = peer) {
+                if (closed) return;
                 Credentials credentials = client.getPeerCredentials();
                 // adbd uses shell on ordinary devices and root with adb root.
                 if (credentials.getUid() != 2000 && credentials.getUid() != 0) continue;
@@ -45,9 +50,9 @@ final class DeviceBridge implements AutoCloseable {
 
     private static String readCommand(InputStream stream) throws IOException {
         ByteArrayOutputStream command = new ByteArrayOutputStream();
-        for (int index = 0; index < 32; index++) {
+        for (int index = 0; index < 256 * 1024; index++) {
             int value = stream.read();
-            if (value == '\n') return command.toString("US-ASCII");
+            if (value == '\n') return command.toString("UTF-8");
             if (value == -1) break;
             command.write(value);
         }
@@ -55,6 +60,16 @@ final class DeviceBridge implements AutoCloseable {
     }
 
     private static String dispatch(NetworkInspector inspector, String command) throws JSONException {
+        if (command.equals("rules")) return inspector.rules().toString();
+        if (command.startsWith("{")) {
+            try {
+                org.json.JSONObject input = new org.json.JSONObject(command);
+                inspector.setRules(input.getJSONArray("rules"));
+                return "{}";
+            } catch (IllegalArgumentException | JSONException error) {
+                return new org.json.JSONObject().put("error", error.getMessage()).toString();
+            }
+        }
         if (command.equals("list")) return inspector.summaries().toString();
         if (command.equals("clear")) {
             inspector.clear();
@@ -69,6 +84,18 @@ final class DeviceBridge implements AutoCloseable {
 
     @Override public void close() throws IOException {
         closed = true;
-        listener.close();
+        // Wake accept before closing: an in-flight native accept can retain the bound socket.
+        try (LocalSocket wakeup = new LocalSocket()) {
+            wakeup.connect(new LocalSocketAddress(name, LocalSocketAddress.Namespace.ABSTRACT));
+        } catch (IOException ignored) {
+            // The listener may already have stopped.
+        } finally {
+            listener.close();
+        }
+        try {
+            worker.join(1000);
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+        }
     }
 }
