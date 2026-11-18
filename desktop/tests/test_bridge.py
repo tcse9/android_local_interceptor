@@ -4,6 +4,9 @@ import importlib.util
 import json
 from pathlib import Path
 import socket
+import ssl
+import subprocess
+import tempfile
 import threading
 import unittest
 from urllib.error import HTTPError
@@ -47,12 +50,54 @@ class BridgeTests(unittest.TestCase):
                 server.shutdown()
                 worker.join()
 
+    def test_custom_ca_trust_keeps_hostname_verification(self):
+        with tempfile.TemporaryDirectory() as directory:
+            certificate = Path(directory) / "ca.pem"
+            key = Path(directory) / "key.pem"
+            subprocess.run([
+                "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+                "-keyout", str(key), "-out", str(certificate), "-days", "1",
+                "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost",
+                "-addext", "basicConstraints=critical,CA:TRUE"
+            ], check=True, capture_output=True)
+            server_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            server_context.load_cert_chain(str(certificate), str(key))
+            with http.server.ThreadingHTTPServer(("127.0.0.1", 0), Echo) as server:
+                server.socket = server_context.wrap_socket(server.socket, server_side=True)
+                worker = threading.Thread(target=server.serve_forever, daemon=True)
+                worker.start()
+                data = {"method": "POST", "url": f"https://localhost:{server.server_port}/echo",
+                        "bodyBase64": "e30=", "headers": [["Content-Type", "application/json"]]}
+                try:
+                    with self.assertRaises(ssl.SSLCertVerificationError):
+                        inspector.replay_request(data)
+                    trusted = inspector.replay_tls_context(certificate)
+                    self.assertTrue(trusted.check_hostname)
+                    self.assertEqual(trusted.verify_mode, ssl.CERT_REQUIRED)
+                    result = inspector.replay_request(data, trusted)
+                    self.assertEqual(result["status"], 201)
+                    self.assertEqual(result["responseBody"]["text"], "{}")
+                    bypassed = inspector.replay_request({**data, "skipTlsVerification": True})
+                    self.assertEqual(bypassed["status"], 201)
+                    self.assertIn("disabled", bypassed["notes"])
+                    with self.assertRaises(ssl.SSLCertVerificationError):
+                        inspector.replay_request(data)
+                    self.assertTrue(trusted.check_hostname)
+                    self.assertEqual(trusted.verify_mode, ssl.CERT_REQUIRED)
+                    data["url"] = f"https://127.0.0.1:{server.server_port}/echo"
+                    with self.assertRaises(ssl.SSLCertVerificationError):
+                        inspector.replay_request(data, trusted)
+                finally:
+                    server.shutdown()
+                    worker.join()
+
     def test_replay_rejects_invalid_inputs(self):
         for data in [
             {"method": "POST", "url": "file:///tmp/test"},
             {"method": "GET", "url": "http://example.com", "bodyBase64": "eA=="},
             {"method": "POST\r\n", "url": "http://example.com"},
             {"method": "POST", "url": "http://example.com", "bodyBase64": "%%%"},
+            {"method": "POST", "url": "https://example.com", "skipTlsVerification": "false"},
         ]:
             with self.assertRaises(ValueError):
                 inspector.replay_request(data)

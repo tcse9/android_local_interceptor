@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import re
 import socket
+import ssl
 import subprocess
 import sys
 import webbrowser
@@ -103,7 +104,14 @@ class Devices:
             self.forwards.clear()
 
 
-def replay_request(data):
+def replay_tls_context(ca_cert=None):
+    context = ssl.create_default_context()
+    if ca_cert:
+        context.load_verify_locations(cafile=str(ca_cert))
+    return context
+
+
+def replay_request(data, tls_context=None):
     method = data.get("method", "")
     url = data.get("url", "")
     if not isinstance(method, str) or not re.fullmatch(r"[A-Z]+", method):
@@ -119,9 +127,21 @@ def replay_request(data):
         raise ValueError("Replay request body exceeds 1 MiB")
     if method in ("GET", "HEAD") and body:
         raise ValueError("Remove the body for GET or HEAD requests")
-    connection_type = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+    skip_tls = data.get("skipTlsVerification", False)
+    if not isinstance(skip_tls, bool):
+        raise ValueError("skipTlsVerification must be a boolean")
     started = time.monotonic()
-    connection = connection_type(parsed.hostname, parsed.port, timeout=25)
+    if parsed.scheme == "https":
+        context = tls_context or replay_tls_context()
+        if skip_tls:
+            # Each opt-out uses its own context so subsequent requests still verify TLS.
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+        connection = http.client.HTTPSConnection(parsed.hostname, parsed.port, timeout=25,
+                                                 context=context)
+    else:
+        connection = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=25)
     try:
         connection.putrequest(method, (parsed.path or "/") + ("?" + parsed.query if parsed.query else ""),
                               skip_accept_encoding=True)
@@ -155,7 +175,9 @@ def replay_request(data):
         return {"status": response.status, "responseHeaders": [[k, v, False] for k, v in response.getheaders()],
                 "responseBody": capture, "headersMs": headers_ms,
                 "elapsedMs": round((time.monotonic() - started) * 1000),
-                "phase": "Finished", "protocol": "HTTP/1.1", "responseUrl": url, "source": "Desktop replay"}
+                "phase": "Finished", "protocol": "HTTP/1.1", "responseUrl": url, "source": "Desktop replay",
+                "notes": "TLS certificate verification disabled for this replay."
+                if skip_tls and parsed.scheme == "https" else ""}
 
     finally:
         connection.close()
@@ -206,7 +228,7 @@ class InspectorHandler(http.server.BaseHTTPRequestHandler):
                 if not isinstance(data, dict):
                     raise ValueError("Expected a JSON object")
                 if parsed.path == "/api/replay":
-                    self.json_reply(replay_request(data))
+                    self.json_reply(replay_request(data, getattr(self.server, "replay_tls_context", None)))
                 else:
                     command = json.dumps({"rules": data.get("rules", [])}, separators=(",", ":"))
                     if len(command.encode()) > 256 * 1024:
@@ -214,6 +236,13 @@ class InspectorHandler(http.server.BaseHTTPRequestHandler):
                     self.json_reply(self.server.devices.command(query, command))
             else:
                 self.reply(404, b'{"error":"Not found"}')
+        except ssl.SSLCertVerificationError as error:
+            self.reply(400, json.dumps({"error":
+                "TLS certificate verification failed: " + error.verify_message +
+                ". For an internal CA or HTTPS-inspecting proxy, restart the dashboard with "
+                "--ca-cert /path/to/trusted-ca.pem using a CA certificate from your API or network team. "
+                "For controlled testing without a CA file, explicitly enable Skip TLS verification in the replay editor."
+            }).encode())
         except (OSError, ValueError, TypeError, AttributeError, http.client.HTTPException,
                 subprocess.SubprocessError) as error:
             self.reply(400, json.dumps({"error": str(error)}).encode())
@@ -256,6 +285,8 @@ def main():
     parser.add_argument("--serial", help="ADB device serial (see adb devices)")
     parser.add_argument("--adb", default="adb", help="Path to adb")
     parser.add_argument("--port", type=int, default=0, help="Dashboard port (default: choose a free port)")
+    parser.add_argument("--ca-cert", type=Path,
+                        help="Additional trusted CA certificates in PEM format for HTTPS replay")
     parser.add_argument("--no-open", action="store_true", help="Print the URL without opening a browser")
     options = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+", options.application_id):
@@ -265,8 +296,10 @@ def main():
 
     devices = Devices(options.adb, options.application_id, options.serial)
     try:
+        tls_context = replay_tls_context(options.ca_cert)
         with http.server.ThreadingHTTPServer(("127.0.0.1", options.port), InspectorHandler) as server:
             server.devices = devices
+            server.replay_tls_context = tls_context
             url = f"http://127.0.0.1:{server.server_port}/"
             print(f"Network Inspector for {options.application_id}\n{url}\nPress Ctrl+C to stop.", flush=True)
             if not options.no_open:

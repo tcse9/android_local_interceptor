@@ -249,6 +249,7 @@ byId("edit-replay").addEventListener("click", () => {
     !hidden && !transportHeaders.has(name.toLowerCase())).map(([name, value]) => name + ": " + value).join("\n");
   byId("replay-encoding").value = body.text === undefined && body.base64 ? "base64" : "text";
   byId("replay-body").value = body.text ?? body.base64 ?? "";
+  byId("replay-skip-tls").checked = false;
   byId("replay-note").textContent = !["complete", "none"].includes(body.state) || body.truncated
     ? "Only a partial request body is available. Complete or replace it before sending."
     : details.notes ?? "Check authentication headers before sending.";
@@ -279,7 +280,8 @@ byId("replay-form").addEventListener("submit", async event => {
     byId("send-replay").disabled = true;
     byId("replay-note").textContent = "Sending from this computer…";
     const startedAt = Date.now();
-    const result = await post("/api/replay", {method, url, headers, bodyBase64: body.base64});
+    const result = await post("/api/replay", {method, url, headers, bodyBase64: body.base64,
+      skipTlsVerification: byId("replay-skip-tls").checked});
     addSaved([{...result, method, url, requestHeaders: headers.map(pair => [...pair, false]),
       requestBody: body, startedAt}]);
     byId("replay-note").textContent = `Received HTTP ${result.status}. Response is in Imported / replayed.`;

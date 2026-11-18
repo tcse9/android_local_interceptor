@@ -72,6 +72,9 @@ try {
   const exported = JSON.parse(await evaluate('document.querySelector("#export-preview").textContent'));
   assert.equal(exported.item[0].request.url, "https://example.com/two");
   await evaluate('document.querySelector("#close-export").click(); document.querySelector("#edit-replay").click()');
+  assert.equal(await evaluate('document.querySelector("#replay-skip-tls").checked'), false);
+  await evaluate('document.querySelector("#replay-skip-tls").checked = true; document.querySelector("#close-replay").click(); document.querySelector("#edit-replay").click()');
+  assert.equal(await evaluate('document.querySelector("#replay-skip-tls").checked'), false);
   assert.equal(await evaluate('document.querySelector("#replay-body").value'), '{"device":"two","secret":"hello"}');
   await evaluate(`document.querySelector("#replay-url").value = ${JSON.stringify(base + "echo")}; document.querySelector("#send-replay").click()`);
   await waitFor('document.querySelector("#replay-note").textContent.includes("Received HTTP 200")');

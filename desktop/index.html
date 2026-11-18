@@ -104,6 +104,8 @@
     <label>Headers, one per line<textarea id="replay-headers" rows="6" spellcheck="false"></textarea></label>
     <label>Body encoding<select id="replay-encoding"><option value="text">UTF-8 text</option><option value="base64">Base64</option></select></label>
     <label>Request body<textarea id="replay-body" rows="8" spellcheck="false"></textarea></label>
+    <label class="check"><input type="checkbox" id="replay-skip-tls">Skip TLS verification for this replay</label>
+    <p>Use this option only for controlled testing. It disables server identity checks and can expose credentials to an impersonated server.</p>
     <p id="replay-note" role="status"></p>
     <div class="toolbar"><button type="submit" id="send-replay" class="primary">Send request</button><button type="button" id="close-replay">Close</button></div>
   </form>

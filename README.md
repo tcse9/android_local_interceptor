@@ -133,6 +133,27 @@ response previews at 256 KiB, and network socket timeout at 25 seconds.
 This operation sends a real request to the URL entered in the editor.
 Authentication headers must be captured explicitly or supplied in the editor.
 
+### HTTPS replay with an internal certificate authority
+
+If replay reports a self-signed certificate in the chain or an unknown issuer, obtain
+the trusted root/intermediate CA certificate from the API or network team as a PEM file.
+Start the dashboard with that additional trust bundle.
+
+```sh
+python3 desktop/inspect.py com.example.app --ca-cert /path/to/company-ca.pem
+```
+
+This augments Python's default CA trust for desktop replay. Certificate chain, hostname,
+and expiry verification remain enabled. The Android app uses its own TLS configuration.
+A hostname mismatch or expired server certificate requires correcting the URL or server certificate.
+Restart the dashboard after changing the CA file and retry the edited request.
+
+For controlled testing when a CA file is unavailable, enable **Skip TLS verification for this replay**
+in the replay editor. This disables certificate-chain and hostname verification for requests sent
+with that checkbox enabled. Opening the editor resets the checkbox, and replay results record when
+verification was disabled. This can expose credentials to an impersonated server, so use it only
+for controlled test endpoints. These desktop changes work with the existing Android dependency.
+
 ### Timing breakdown
 
 Add the timing event listener to the same client as the interceptor.
